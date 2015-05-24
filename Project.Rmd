@@ -1,0 +1,185 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Venkata Yerubandi"
+date: "May 23, 2015"
+output: pdf_document
+---
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here:](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+
+### Data 
+
+The training data for this project are available here: 
+[train data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here: 
+[test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+### Goal 
+
+The goal of this project is to predict the manner in which the subjects did the exercise. This is the "classe" variable in the training set. In accomplishing the above we create a report describing how we built the model, used cross validation, what you think the expected out of sample error is, and why we made the choices we did. Finally using the model we have, we prediction the outcomes for 20 different test cases. 
+
+### Preliminary Work 
+
+#### Package Installation
+We need to install the following packages : randomForest, rattle, rpart etc
+
+#### Reproducability
+
+To ensure the reproducability of the data analysis , we use a special seed 5555. 
+
+#### Building the model 
+
+Outcome variable is **classe**. It is a factor variable with the following  specification
+
+* perfect posture as per specification  (Class A) 
+* throwing the elbows to the front (Class B), 
+* lifting the dumbbell only halfway (Class C), 
+* lowering the dumbbell only halfway (Class D) 
+* throwing the hips to the front (Class E).
+
+After cleaning the data, we will try to fit a model and use it for predictions. We will experiment with various models and select the one with highest accuracy. 
+
+#### Cross Validation 
+
+We use cross validation to compare the performances of different predictive modelling procedures. We use random sub sampling validation with out replacement. We accomplish this by bifurcating the training data into subSampleTraining data (80% of the original Training data set) and subSampleTesting data (20%). We essentially try to figure out the accurate model using the subSample data sets and test it on the original Testing data set.
+
+#### Expected out of sample error 
+
+We calculate this quantity using 1-accuracy. Accuracy is number of correctly classified items over total number of items in the data set. This measure is used to select the accurate model in the cross validated data set. 
+
+#### Data Analysis
+```{r}
+# set the seed for reproducability
+set.seed(5555)
+
+# loading the required libraries 
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+```
+
+##### Cleaning Data 
+
+On a precursory walk through of the csv files , we see that the file needs some data cleaning - like remove NA,#DIV/0!  etc 
+```{r}
+# Load the training data set 
+trainingset <- read.csv("/Users/venkata/Downloads/coursera/Practical Machine Learning/Project/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+
+# Load the testing data set 
+testingset <- read.csv("/Users/venkata/Downloads/coursera/Practical Machine Learning/Project/pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+
+# Check dimensions for number of variables and number of observations
+dim(trainingset)
+dim(testingset)
+
+# Delete columns with all missing values
+trainingset<-trainingset[,colSums(is.na(trainingset)) == 0]
+testingset <-testingset[,colSums(is.na(testingset)) == 0]
+
+# Deleting the irrelavent variables 
+trainingset   <-trainingset[,-c(1:7)]
+testingset <-testingset[,-c(1:7)]
+
+# Check dimensions for number of variables and number of observations after the clean up 
+dim(trainingset)
+dim(testingset)
+
+# for debugging 
+#head(trainingset)
+#head(testingset)
+
+```
+
+
+##### Cross Validation on partitioned training data sets
+We further create subSampleTraining and subSampleTesting data sets using the 80%/20% ratio
+```{r}
+subsamples <- createDataPartition(y=trainingset$classe, p=0.80, list=FALSE)
+subSampleTraining <- trainingset[subsamples, ] 
+subSampleTesting <- trainingset[-subsamples, ]
+```
+
+##### 1. Trying out modelling using decision tree
+We try to fit a decision tree on the subSampleTraining data set
+```{r}
+# preparing model1
+ctrl <- trainControl(allowParallel=TRUE)
+fit1 <- train(classe ~.,data=subSampleTraining,method="rpart" , trControl = ctrl)
+
+# prediction
+prediction1 <- predict(fit1,subSampleTesting)
+#prediction1
+
+# plotting
+library(rattle)
+fancyRpartPlot(fit1$finalModel)
+
+```
+
+##### Confusion matrix for model built using decision tree
+
+We calculate a cross-tabulation of observed and predicted classes with associated statistics.
+
+```{r}
+confusionMatrix(prediction1, subSampleTesting$classe)
+```
+
+##### 2. Trying out modelling using random forests
+We try to fit a random forest on the subSampleTraining data set
+```{r}
+# preparing model1
+fit2 <- randomForest(classe ~.,data=subSampleTraining,method="class" )
+
+# prediction
+prediction2 <- predict(fit2,subSampleTesting,type="class")
+```
+
+##### Confusion matrix for model built using random trees
+
+We calculate a cross-tabulation of observed and predicted classes with associated statistics.
+
+```{r}
+confusionMatrix(prediction2, subSampleTesting$classe)
+```
+
+#### Outcome
+
+##### Differences between decision trees and random forests
+
+From Wikipedia - In particular, trees that are grown very deep tend to learn highly irregular patterns: they overfit their training sets, because they have low bias, but very high variance. Random forests are a way of averaging multiple deep decision trees, trained on different parts of the same training set, with the goal of reducing the variance. This comes at the expense of a small increase in the bias and some loss of interpretability, but generally greatly boosts the performance of the final model.
+
+**So ideally Random Forests should do better than decision trees. **
+
+This is supported in our thesis as well - 
+Accuracy for Random Forest model was 0.996 (95% CI: (0.994, 0.998)) compared to 0.493 (95% CI: (0.4772, 0.5088)) for Decision Tree model. So we choose random Forest model. The accuracy of the model is 0.996. The expected out-of-sample error is estimated at 0.004, or 0.4%.
+
+The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. Our Test data set comprises 20 cases. With an accuracy above 99% on our cross-validation data, we can expect that very few, or none, of the test samples will be missclassified.
+
+##### Prediction on test data 
+
+```{r}
+finalprediction <- predict(fit2, testingset, type="class")
+finalprediction
+```
+
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(finalprediction)
+```
+#### References
+* [Cross Validation](http://en.wikipedia.org/wiki/Cross-validation_%28statistics%29)
+* [Random Forests](http://en.wikipedia.org/wiki/Random_forest#Preliminaries:_decision_tree_learning)
